@@ -3,7 +3,6 @@
 //
 // It is only suitable for use as a 'private' cache (i.e. for a web-browser or an API-client
 // and not for a shared proxy).
-//
 package httpcache
 
 import (
@@ -103,6 +102,10 @@ type Transport struct {
 	Cache     Cache
 	// If true, responses returned from the cache will be given an extra header, X-From-Cache
 	MarkCachedResponses bool
+	// If non-zero, this is the default acceptable max cache age when the cached response does NOT
+	// contain Cache-Control nor Expires headers.  This is different from Cache-Control max-age in
+	// request header which overrides Cache-Control values in cached response.
+	DefaultCacheMaxAge time.Duration
 }
 
 // NewTransport returns a new Transport with the
@@ -159,7 +162,7 @@ func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 
 		if varyMatches(cachedResp, req) {
 			// Can only use cached value if the new request doesn't Vary significantly
-			freshness := getFreshness(cachedResp.Header, req.Header)
+			freshness := getFreshnessWithDefaultMaxAge(cachedResp.Header, req.Header, t.DefaultCacheMaxAge)
 			if freshness == fresh {
 				return cachedResp, nil
 			}
@@ -289,6 +292,10 @@ var clock timer = &realClock{}
 // Because this is only a private cache, 'public' and 'private' in cache-control aren't
 // signficant. Similarly, smax-age isn't used.
 func getFreshness(respHeaders, reqHeaders http.Header) (freshness int) {
+	return getFreshnessWithDefaultMaxAge(respHeaders, reqHeaders, 0)
+}
+
+func getFreshnessWithDefaultMaxAge(respHeaders, reqHeaders http.Header, defaultCacheMaxAge time.Duration) (freshness int) {
 	respCacheControl := parseCacheControl(respHeaders)
 	reqCacheControl := parseCacheControl(reqHeaders)
 	if _, ok := reqCacheControl["no-cache"]; ok {
@@ -309,6 +316,7 @@ func getFreshness(respHeaders, reqHeaders http.Header) (freshness int) {
 
 	var lifetime time.Duration
 	var zeroDuration time.Duration
+	var expiresHeader string
 
 	// If a response includes both an Expires header and a max-age directive,
 	// the max-age directive overrides the Expires header, even if the Expires header is more restrictive.
@@ -318,7 +326,7 @@ func getFreshness(respHeaders, reqHeaders http.Header) (freshness int) {
 			lifetime = zeroDuration
 		}
 	} else {
-		expiresHeader := respHeaders.Get("Expires")
+		expiresHeader = respHeaders.Get("Expires")
 		if expiresHeader != "" {
 			expires, err := time.Parse(time.RFC1123, expiresHeader)
 			if err != nil {
@@ -359,6 +367,15 @@ func getFreshness(respHeaders, reqHeaders http.Header) (freshness int) {
 		maxstaleDuration, err := time.ParseDuration(maxstale + "s")
 		if err == nil {
 			currentAge = time.Duration(currentAge - maxstaleDuration)
+		}
+	}
+
+	// if cached response does not contain cache control or expires header
+	// and if a default fallback cache lifetime is set, we use that to determine freshness of the
+	// cached response.
+	if len(reqCacheControl) == 0 && len(respCacheControl) == 0 && expiresHeader == "" {
+		if defaultCacheMaxAge > 0 {
+			lifetime = defaultCacheMaxAge
 		}
 	}
 

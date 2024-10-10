@@ -1473,3 +1473,17 @@ func TestClientTimeout(t *testing.T) {
 		t.Error("client.Do took 2+ seconds, want < 2 seconds")
 	}
 }
+
+// TestDefaultMaxAgeWithNoResponseCacheControl verifies that the default max age will be used to determine
+// freshness with no Cache-Control header in request and response headers
+func TestDefaultMaxAgeWithNoResponseCacheControl(t *testing.T) {
+	resetTest()
+	now := time.Now()
+	respHeaders := http.Header{}
+	respHeaders.Set("date", now.Format(time.RFC1123))
+
+	reqHeaders := http.Header{}
+	if getFreshnessWithDefaultMaxAge(respHeaders, reqHeaders, 2*time.Second) != fresh {
+		t.Fatal("freshness isn't fresh")
+	}
+}

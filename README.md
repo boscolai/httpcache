@@ -3,6 +3,14 @@ httpcache
 
 [![Build Status](https://travis-ci.org/gregjones/httpcache.svg?branch=master)](https://travis-ci.org/gregjones/httpcache) [![GoDoc](https://godoc.org/github.com/gregjones/httpcache?status.svg)](https://godoc.org/github.com/gregjones/httpcache)
 
+This Fork
+---------
+This is a fork of gregjones/httpcache.  The purpose of the fork is to accept a default max cache age
+set in Transport.  This default max age will be used to determine the freshness of a cached response ONLY if
+there are no Cache-Control headers in the cached response and the current request.
+
+Package
+--------
 Package httpcache provides a http.RoundTripper implementation that works as a mostly [RFC 7234](https://tools.ietf.org/html/rfc7234) compliant cache for http responses.
 
 It is only suitable for use as a 'private' cache (i.e. for a web-browser or an API-client and not for a shared proxy).
